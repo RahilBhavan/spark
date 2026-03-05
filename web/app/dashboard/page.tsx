@@ -325,7 +325,11 @@ export default function DashboardPage() {
         </div>
       </main>
 
-      <footer className="border-t border-zinc-800 bg-zinc-950/80 px-6 py-4 font-mono text-xs text-zinc-500">
+      <footer
+        className="border-t border-zinc-800 bg-zinc-950/80 px-6 py-4 font-mono text-xs text-zinc-500"
+        role="status"
+        aria-label="Node status summary"
+      >
         <div className="mx-auto flex max-w-5xl items-center gap-x-8">
           <span>
             <span className="text-zinc-600">CHANNELS.N</span>{" "}

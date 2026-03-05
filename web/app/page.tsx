@@ -41,7 +41,12 @@ function StatusStrip() {
     : "—";
 
   return (
-    <footer className="border-t border-zinc-800 bg-zinc-950/80 px-6 py-4 font-mono text-xs text-zinc-500">
+    <footer
+      className="border-t border-zinc-800 bg-zinc-950/80 px-6 py-4 font-mono text-xs text-zinc-500"
+      role="status"
+      aria-live="polite"
+      aria-label="Live node status"
+    >
       <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-8 gap-y-2">
         <span>
           <span className="text-zinc-600">CHANNELS.N</span>{" "}
@@ -95,6 +100,9 @@ type ConfigPayload = {
 const DEFAULT_CAPACITY = 1_000_000;
 const DEFAULT_LOCAL = 300_000;
 
+const SIM_CAPACITY_ID = "sim-capacity";
+const SIM_LOCAL_ID = "sim-local";
+
 function RebalanceSimulator() {
   const [capacity, setCapacity] = useQueryState(
     "capacity",
@@ -105,6 +113,7 @@ function RebalanceSimulator() {
     parseAsInteger.withDefault(DEFAULT_LOCAL)
   );
   const [config, setConfig] = useState<ConfigPayload | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState(false);
 
   useEffect(() => {
     fetch("/api/config")
@@ -112,6 +121,12 @@ function RebalanceSimulator() {
       .then((data: ConfigPayload) => setConfig(data))
       .catch(() => setConfig(null));
   }, []);
+
+  useEffect(() => {
+    if (!copyFeedback) return;
+    const t = setTimeout(() => setCopyFeedback(false), 2000);
+    return () => clearTimeout(t);
+  }, [copyFeedback]);
 
   const capacityNum = Math.max(1, capacity ?? DEFAULT_CAPACITY);
   const localNum = Math.max(
@@ -133,12 +148,20 @@ function RebalanceSimulator() {
   const nodeGrade = gradeFromRatio(ratio);
   const withinBand = ratio >= low && ratio <= high;
 
+  const handleCopyLink = () => {
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    void navigator.clipboard.writeText(url).then(() => setCopyFeedback(true));
+  };
+
   return (
-    <section className="border border-zinc-800 bg-zinc-900/40 px-6 py-6">
+    <section
+      className="border border-zinc-800 bg-zinc-900/40 px-6 py-6"
+      aria-labelledby="simulator-heading"
+    >
       <p className="mb-2 font-display text-[length:var(--text-display-label)] font-medium uppercase tracking-widest text-zinc-500">
         /// Simulation Module
       </p>
-      <h2 className="mb-4 font-display text-xl font-semibold text-zinc-100 sm:text-2xl">
+      <h2 id="simulator-heading" className="mb-4 font-display text-xl font-semibold text-zinc-100 sm:text-2xl">
         Rebalance Simulator
       </h2>
       <p className="mb-2 max-w-xl text-sm text-zinc-400">
@@ -154,88 +177,116 @@ function RebalanceSimulator() {
       <div className="mb-4 flex items-center gap-4">
         <button
           type="button"
-          onClick={() => {
-            navigator.clipboard.writeText(
-              typeof window !== "undefined" ? window.location.href : ""
-            );
-          }}
-          className="rounded border border-zinc-600 bg-zinc-800/60 px-3 py-1.5 font-mono text-xs text-zinc-300 transition hover:border-zinc-500 hover:bg-zinc-800"
+          onClick={handleCopyLink}
+          className="min-h-[44px] min-w-[44px] rounded border border-zinc-600 bg-zinc-800/60 px-3 py-2 font-mono text-xs text-zinc-300 transition hover:border-zinc-500 hover:bg-zinc-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--spark)]"
+          aria-label={copyFeedback ? "Link copied" : "Copy simulator link"}
         >
-          Copy link
+          {copyFeedback ? "Copied!" : "Copy link"}
         </button>
       </div>
       <div className="grid gap-6 sm:grid-cols-2">
         <div>
-          <label className="mb-1 block text-xs text-zinc-500">
+          <label htmlFor={SIM_CAPACITY_ID} className="mb-1 block text-xs text-zinc-500">
             Capacity (sats)
           </label>
           <input
+            id={SIM_CAPACITY_ID}
             type="number"
+            min={1}
             value={capacity ?? DEFAULT_CAPACITY}
             onChange={(e) =>
               setCapacity(Math.max(1, Number(e.target.value) || 0))
             }
-            className="w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2 font-mono text-sm text-zinc-100 focus:border-[var(--spark)] focus:outline-none"
+            className="w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2 font-mono text-sm text-zinc-100 focus:border-[var(--spark)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--spark)]/30 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900"
+            aria-describedby="sim-target-band"
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs text-zinc-500">
+          <label htmlFor={SIM_LOCAL_ID} className="mb-1 block text-xs text-zinc-500">
             Local balance (sats)
           </label>
           <input
+            id={SIM_LOCAL_ID}
             type="number"
+            min={0}
+            max={capacityNum}
             value={localBalance ?? DEFAULT_LOCAL}
             onChange={(e) =>
               setLocalBalance(
                 Math.max(0, Math.min(Number(e.target.value) || 0, capacityNum))
               )
             }
-            className="w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2 font-mono text-sm text-zinc-100 focus:border-[var(--spark)] focus:outline-none"
+            className="w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2 font-mono text-sm text-zinc-100 focus:border-[var(--spark)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--spark)]/30 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900"
           />
         </div>
       </div>
-      <div className="mt-6 grid gap-2 font-mono text-sm">
-        <p>
-          <span className="text-zinc-500">Channel grade:</span>{" "}
+      {config && (
+        <p id="sim-target-band" className="sr-only">
+          Target band: {Math.round(config.target_ratio_low * 100)} to {Math.round(config.target_ratio_high * 100)} percent local
+        </p>
+      )}
+      {/* Ratio bar: 0% — [target band] — 100% with current ratio marker */}
+      <div className="mt-6">
+        <p className="mb-1.5 font-mono text-xs text-zinc-500">
+          Local ratio: <span className="text-zinc-200">{(ratio * 100).toFixed(1)}%</span>
+          {config && (
+            <span className="ml-2 text-zinc-500">
+              {withinBand ? "(within target)" : "(outside target)"}
+            </span>
+          )}
+        </p>
+        <div className="relative h-2 w-full overflow-hidden rounded-full bg-zinc-800" role="img" aria-label={`Local ratio ${(ratio * 100).toFixed(1)} percent. Target band ${Math.round(low * 100)} to ${Math.round(high * 100)} percent.`}>
           <span
-            className={
+            className="absolute inset-y-0 left-0 rounded-l-full bg-zinc-600/80"
+            style={{ width: `${low * 100}%` }}
+          />
+          <span
+            className="absolute inset-y-0 rounded-full bg-green-600/40"
+            style={{ left: `${low * 100}%`, width: `${(high - low) * 100}%` }}
+          />
+          <span
+            className="absolute top-1/2 h-3 w-0.5 -translate-y-1/2 rounded-full bg-[var(--spark)]"
+            style={{ left: `${Math.min(100, Math.max(0, ratio * 100))}%` }}
+          />
+        </div>
+      </div>
+      {/* Results: grade + key metrics in clear hierarchy */}
+      <div className="mt-6 rounded border border-zinc-800 bg-zinc-950/60 px-4 py-4">
+        <div className="mb-3 flex flex-wrap items-baseline gap-2">
+          <span className="font-mono text-xs text-zinc-500">Channel grade</span>
+          <span
+            className={`font-display text-lg font-semibold ${
               nodeGrade === "A" || nodeGrade === "B"
                 ? "text-green-400/90"
                 : nodeGrade === "C"
                   ? "text-[var(--spark)]"
                   : "text-red-400/90"
-            }
+            }`}
           >
             {nodeGrade}
           </span>
           {config && (
-            <span className="ml-2 text-zinc-500 text-xs">
-              {withinBand ? "(within target band)" : "(outside target band)"}
+            <span className="font-mono text-xs text-zinc-500">
+              {withinBand ? "within target band" : "outside target band"}
             </span>
           )}
-        </p>
-        <p>
-          <span className="text-zinc-500">Ratio:</span>{" "}
-          <span className="text-zinc-200">{(ratio * 100).toFixed(1)}%</span>
-        </p>
-        <p>
-          <span className="text-zinc-500">Imbalance (sats):</span>{" "}
-          <span className="text-zinc-200">
-            {imbalanceSats.toLocaleString()}
-          </span>
-        </p>
-        <p>
-          <span className="text-zinc-500">Est. rebalance (≈80% of imbalance):</span>{" "}
-          <span className="text-zinc-200">
-            {rebalanceAmount.toLocaleString()} sats
-          </span>
-        </p>
-        <p>
-          <span className="text-zinc-500">Max fee @ 500 ppm (sats):</span>{" "}
-          <span className="text-[var(--spark)]">{maxFeeSats}</span>
-        </p>
+        </div>
+        <ul className="grid gap-1.5 font-mono text-sm" role="list">
+          <li>
+            <span className="text-zinc-500">Imbalance:</span>{" "}
+            <span className="text-zinc-200">{imbalanceSats.toLocaleString()} sats</span>
+          </li>
+          <li>
+            <span className="text-zinc-500">Est. rebalance (≈80%):</span>{" "}
+            <span className="font-medium text-[var(--spark)]">{rebalanceAmount.toLocaleString()} sats</span>
+          </li>
+          <li>
+            <span className="text-zinc-500">Max fee @ 500 ppm:</span>{" "}
+            <span className="font-medium text-[var(--spark)]">{maxFeeSats} sats</span>
+          </li>
+        </ul>
         {config?.estimated_extra_cost_per_forward_sats != null && (
-          <p className="mt-2 border-t border-zinc-800 pt-2 text-zinc-400">
+          <p className="mt-3 border-t border-zinc-800 pt-3 font-mono text-xs text-zinc-400">
             Est. fee to rebalance: <span className="text-zinc-200">{maxFeeSats}</span> sats.
             If you don&apos;t rebalance, typical extra cost per forward:{" "}
             <span className="text-zinc-200">{config.estimated_extra_cost_per_forward_sats}</span> sats (approx).
@@ -294,7 +345,8 @@ export default function Home() {
                   href="/dashboard"
                   data-cursor="Dashboard"
                   strength={0.25}
-                  className="rounded border border-[var(--spark)]/60 bg-[var(--spark)]/10 px-6 py-3 font-mono text-sm text-[var(--spark)] transition hover:border-[var(--spark-muted)] hover:bg-[var(--spark)]/20"
+                  className="min-h-[44px] min-w-[44px] rounded border-0 bg-[var(--spark)] px-6 py-3 font-mono text-sm font-medium text-zinc-950 transition hover:bg-[var(--spark-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--spark)]"
+                  aria-label="Go to dashboard"
                 >
                   Dashboard
                 </MagneticButton>
@@ -304,7 +356,8 @@ export default function Home() {
                   rel="noopener noreferrer"
                   data-cursor="Initialize"
                   strength={0.25}
-                  className="rounded border border-zinc-600 bg-zinc-800/60 px-6 py-3 font-mono text-sm text-zinc-300 transition hover:border-zinc-500 hover:bg-zinc-800"
+                  className="min-h-[44px] min-w-[44px] rounded border border-zinc-600 bg-transparent px-6 py-3 font-mono text-sm text-zinc-300 transition hover:border-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--spark)]"
+                  aria-label="Initialize manager (opens GitHub)"
                 >
                   Initialize Manager
                 </MagneticButton>
@@ -316,7 +369,7 @@ export default function Home() {
           {/* Feature sections — asymmetric grid, one block larger / offset */}
           <RevealOnScroll variant="fade-up" start="top 88%">
             <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-12 lg:gap-12">
-            <section className="border border-zinc-800 bg-zinc-900/30 px-6 py-6 lg:col-span-5">
+            <section className="border border-zinc-800 bg-zinc-900/30 px-6 py-6 transition-colors hover:border-zinc-700 hover:bg-zinc-900/50 lg:col-span-5">
               <p className="mb-2 font-display text-[length:var(--text-display-label)] font-medium uppercase tracking-widest text-zinc-500">
                 Channel Health
               </p>
@@ -324,11 +377,15 @@ export default function Home() {
                 Real-Time Channel Health
               </h2>
               <p className="font-mono text-sm text-zinc-400">
-                Scores each channel by local/capacity ratio. Healthy 0.40–0.60,
-                warning 0.20–0.80, critical outside. Snapshot every 5 minutes.
+                Scores each channel by local/capacity ratio.
               </p>
+              <ul className="mt-2 list-inside list-disc space-y-0.5 font-mono text-xs text-zinc-500" aria-hidden>
+                <li>Healthy: 40–60% local</li>
+                <li>Warning: 20–80%</li>
+                <li>Critical: outside band · Snapshot every 5 min</li>
+              </ul>
             </section>
-            <section className="border border-zinc-800 bg-zinc-900/30 px-6 py-6 lg:col-span-5">
+            <section className="border border-zinc-800 bg-zinc-900/30 px-6 py-6 transition-colors hover:border-zinc-700 hover:bg-zinc-900/50 lg:col-span-5">
               <p className="mb-2 font-display text-[length:var(--text-display-label)] font-medium uppercase tracking-widest text-zinc-500">
                 Analysis
               </p>
@@ -337,10 +394,13 @@ export default function Home() {
               </h2>
               <p className="font-mono text-sm text-zinc-400">
                 Urgency score and direction: depleted outbound (low local), depleted
-                inbound (high local). Prioritizes top 5 for rebalance.
+                inbound (high local).
               </p>
+              <ul className="mt-2 list-inside list-disc space-y-0.5 font-mono text-xs text-zinc-500" aria-hidden>
+                <li>Prioritizes top 5 channels for rebalance</li>
+              </ul>
             </section>
-            <section className="border border-zinc-800 bg-zinc-900/30 px-6 py-6 sm:col-span-2 lg:col-span-2 lg:-mt-2 lg:self-end">
+            <section className="border border-zinc-800 bg-zinc-900/30 px-6 py-6 transition-colors hover:border-zinc-700 hover:bg-zinc-900/50 sm:col-span-2 lg:col-span-2 lg:-mt-2 lg:self-end">
               <p className="mb-2 font-display text-[length:var(--text-display-label)] font-medium uppercase tracking-widest text-zinc-500">
                 Integration
               </p>
@@ -348,9 +408,12 @@ export default function Home() {
                 LND Integration
               </h2>
               <p className="font-mono text-sm text-zinc-400">
-                Connects to LND REST. Rebalance every 10 min, snapshot every 5.
-                Optional InfluxDB + Grafana for time-series.
+                Connects to LND REST.
               </p>
+              <ul className="mt-2 list-inside list-disc space-y-0.5 font-mono text-xs text-zinc-500" aria-hidden>
+                <li>Rebalance every 10 min · Snapshot every 5</li>
+                <li>Optional InfluxDB + Grafana</li>
+              </ul>
             </section>
             </div>
           </RevealOnScroll>
