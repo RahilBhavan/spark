@@ -1,0 +1,38 @@
+# Optional: run SPARK BTC scheduler + API in Docker.
+# For LND on the host (e.g. Polar), set LND_REST_URL=http://host.docker.internal:8081
+# and mount LND_MACAROON_PATH (and LND_TLS_CERT_PATH if needed) as volumes.
+# Copy .env from channel-liquidity-manager and ensure LND_* and REBALANCER_DB_PATH are set.
+
+services:
+  scheduler:
+    build:
+      context: ./channel-liquidity-manager
+      dockerfile: Dockerfile
+    env_file:
+      - ./channel-liquidity-manager/.env
+    volumes:
+      - spark_db:/data
+    environment:
+      - REBALANCER_DB_PATH=/data/rebalancer.db
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./channel-liquidity-manager
+      dockerfile: Dockerfile
+    env_file:
+      - ./channel-liquidity-manager/.env
+    volumes:
+      - spark_db:/data
+    environment:
+      - REBALANCER_DB_PATH=/data/rebalancer.db
+      - PORT=5000
+    ports:
+      - "5000:5000"
+    command: ["python", "api_server.py"]
+    depends_on:
+      - scheduler
+    restart: unless-stopped
+
+volumes:
+  spark_db:

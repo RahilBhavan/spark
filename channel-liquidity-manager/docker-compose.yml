@@ -1,0 +1,25 @@
+version: "3.8"
+services:
+  influxdb:
+    image: influxdb:2.7
+    ports: ["8086:8086"]
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: admin
+      DOCKER_INFLUXDB_INIT_PASSWORD: password123
+      DOCKER_INFLUXDB_INIT_ORG: lightning
+      DOCKER_INFLUXDB_INIT_BUCKET: channels
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: mytoken123
+    volumes: [influxdb_data:/var/lib/influxdb2]
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    ports: ["3000:3000"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes: [grafana_data:/var/lib/grafana]
+    depends_on: [influxdb]
+
+volumes:
+  influxdb_data:
+  grafana_data:
