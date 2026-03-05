@@ -19,14 +19,21 @@ const FALLBACK: StatusPayload = {
   source: "none",
 };
 
-export async function GET(): Promise<NextResponse<StatusPayload>> {
+export async function GET(
+  request: Request
+): Promise<NextResponse<StatusPayload>> {
   const apiUrl = process.env.REBALANCER_API_URL;
   if (!apiUrl) {
     return NextResponse.json(FALLBACK);
   }
 
+  const node = new URL(request.url).searchParams.get("node");
+  const qs = node ? `?node=${encodeURIComponent(node)}` : "";
+
   try {
-    const res = await fetch(`${apiUrl.replace(/\/$/, "")}/api/status`, {
+    const res = await fetch(
+      `${apiUrl.replace(/\/$/, "")}/api/status${qs}`,
+      {
       next: { revalidate: 0 },
       headers: { Accept: "application/json" },
     });

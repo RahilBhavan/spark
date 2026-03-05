@@ -43,12 +43,21 @@ def rebalance(score: ChannelScore) -> Result:
     max_fee = max(1, int(amount * MAX_FEE_PPM / 1_000_000))
     logger.info("Rebalancing %s: %s sats, max_fee=%s", score.alias, f"{amount:,}", max_fee)
 
-    # Step 1: Create self-invoice
-    try:
-        inv = lnd.add_invoice(amount, f"rebal:{score.chan_id[:8]}")
-        bolt11 = inv["payment_request"]
-    except Exception as e:
-        return Result(False, score.chan_id, amount, 0, 0.0, f"Invoice failed: {e}")
+    # Step 1: Create self-invoice (with one retry and backoff on LND error)
+    bolt11 = None
+    for attempt in range(2):
+        try:
+            inv = lnd.add_invoice(amount, f"rebal:{score.chan_id[:8]}")
+            bolt11 = inv["payment_request"]
+            break
+        except Exception as e:
+            if attempt == 0:
+                logger.warning("Invoice failed, retrying after 2s: %s", e)
+                time.sleep(2)
+            else:
+                return Result(False, score.chan_id, amount, 0, 0.0, f"Invoice failed: {e}")
+    if not bolt11:
+        return Result(False, score.chan_id, amount, 0, 0.0, "Invoice failed")
 
     # Step 2: Choose which channel to force-exit through
     if score.direction == Direction.DEPLETED_OUTBOUND:
@@ -65,8 +74,22 @@ def rebalance(score: ChannelScore) -> Result:
             )
         out_chan = others[0].chan_id
 
-    # Step 3: Execute circular payment (v2/router/send returns {success, fee_sat, error})
-    res = lnd.send_payment(bolt11, out_chan, max_fee)
+    # Step 3: Execute circular payment (with one retry and backoff on LND error)
+    res = None
+    for attempt in range(2):
+        try:
+            res = lnd.send_payment(bolt11, out_chan, max_fee)
+            break
+        except Exception as e:
+            if attempt == 0:
+                logger.warning("Send payment failed, retrying after 2s: %s", e)
+                time.sleep(2)
+            else:
+                return Result(
+                    False, score.chan_id, amount, 0, 0.0, f"Payment failed: {e}"
+                )
+    if not res:
+        return Result(False, score.chan_id, amount, 0, 0.0, "Payment failed")
 
     if not res.get("success"):
         return Result(
@@ -84,8 +107,10 @@ def rebalance(score: ChannelScore) -> Result:
     return Result(True, score.chan_id, amount, fee_sats, fee_ppm)
 
 
-def run_cycle() -> list[Result]:
-    candidates = get_candidates()
+def run_cycle(candidates: list[ChannelScore] | None = None) -> list[Result]:
+    """Run rebalance for up to 5 candidates. If candidates is None, get from get_candidates()."""
+    if candidates is None:
+        candidates = get_candidates()
     if not candidates:
         logger.info("All channels healthy")
         return []

@@ -2,6 +2,9 @@
 
 import { useQueryState, parseAsInteger } from "nuqs";
 import { Suspense, useEffect, useState } from "react";
+import { MagneticButton } from "./components/magnetic-button";
+import { ParallaxSection } from "./components/parallax-section";
+import { RevealOnScroll } from "./components/reveal-on-scroll";
 
 type StatusPayload = {
   channels_n: number;
@@ -132,10 +135,10 @@ function RebalanceSimulator() {
 
   return (
     <section className="border border-zinc-800 bg-zinc-900/40 px-6 py-6">
-      <p className="mb-2 font-mono text-xs uppercase tracking-wider text-zinc-500">
+      <p className="mb-2 font-display text-[length:var(--text-display-label)] font-medium uppercase tracking-widest text-zinc-500">
         /// Simulation Module
       </p>
-      <h2 className="mb-4 font-mono text-xl font-semibold text-zinc-100">
+      <h2 className="mb-4 font-display text-xl font-semibold text-zinc-100 sm:text-2xl">
         Rebalance Simulator
       </h2>
       <p className="mb-2 max-w-xl text-sm text-zinc-400">
@@ -246,47 +249,78 @@ function RebalanceSimulator() {
 export default function Home() {
   return (
     <div className="min-h-screen flex flex-col bg-[#0c0c0c] text-zinc-200">
-      <main className="flex-1 px-6 py-16 sm:px-8 md:px-12">
-        <div className="mx-auto max-w-5xl">
-          {/* Hero */}
-          <header className="mb-20 text-center">
-            <p className="mb-2 font-mono text-xs uppercase tracking-widest text-zinc-500">
-              Lightning liquidity ops for Bitcoin
-            </p>
-            <h1 className="mb-4 font-mono text-4xl font-bold tracking-tight text-white sm:text-5xl">
-              <span className="text-[var(--spark)]">SPARK</span>{" "}
-              <span className="text-zinc-300">BTC</span>
-            </h1>
-            <p className="mx-auto max-w-2xl font-mono text-base text-zinc-400 sm:text-lg">
-              Operational intelligence for every channel, every rebalance,
-              every node.
-            </p>
-            <p className="mx-auto mt-4 max-w-2xl font-mono text-sm text-zinc-500">
-              Score channel balance ratios, run circular rebalances, and track
-              health in near real-time. Keep liquidity balanced — pay less, route more.
-            </p>
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-              <a
-                href="/dashboard"
-                className="inline-block rounded border border-[var(--spark)]/60 bg-[var(--spark)]/10 px-6 py-3 font-mono text-sm text-[var(--spark)] transition hover:border-[var(--spark-muted)] hover:bg-[var(--spark)]/20"
-              >
-                Dashboard
-              </a>
-              <a
-                href="https://github.com/rahilbhavan/spark/tree/main/channel-liquidity-manager"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-block rounded border border-zinc-600 bg-zinc-800/60 px-6 py-3 font-mono text-sm text-zinc-300 transition hover:border-zinc-500 hover:bg-zinc-800"
-              >
-                Initialize Manager
-              </a>
-            </div>
-          </header>
+      <main className="flex-1 px-[10vw] py-24 sm:px-[12vw] md:px-[14vw]">
+        <div className="mx-auto max-w-[90rem] relative">
+          {/* Hero parallax background — moves slower than scroll */}
+          <ParallaxSection
+            className="pointer-events-none absolute left-0 top-0 h-[80vh] w-full max-w-[70rem] opacity-30"
+            speed={0.5}
+          >
+            <div
+              className="h-full w-full rounded-full blur-3xl"
+              style={{
+                background:
+                  "radial-gradient(ellipse 60% 50% at 30% 20%, var(--spark) 0%, transparent 55%)",
+              }}
+            />
+          </ParallaxSection>
 
-          {/* Feature sections */}
-          <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-            <section className="border border-zinc-800 bg-zinc-900/30 px-5 py-5">
-              <h2 className="mb-2 font-mono text-lg font-semibold text-zinc-100">
+          {/* Hero — asymmetric: headline dominates left, copy + CTAs right (stack on small) */}
+          <RevealOnScroll variant="fade-up" start="top 90%">
+            <header className="relative mb-28 grid grid-cols-1 gap-12 lg:grid-cols-12 lg:gap-16">
+            <div className="lg:col-span-8">
+              <p className="mb-4 font-display text-[length:var(--text-display-label)] font-medium uppercase tracking-[0.2em] text-zinc-500">
+                Lightning liquidity ops for Bitcoin
+              </p>
+              <h1
+                className="font-display font-bold tracking-tight text-white"
+                style={{ fontSize: "var(--text-display-hero)", lineHeight: "0.95" }}
+              >
+                <span className="text-[var(--spark)]">SPARK</span>{" "}
+                <span className="text-zinc-300">BTC</span>
+              </h1>
+            </div>
+            <div className="flex flex-col justify-end lg:col-span-4 lg:pl-4">
+              <p className="font-display text-lg font-light text-zinc-400 sm:text-xl">
+                Operational intelligence for every channel, every rebalance,
+                every node.
+              </p>
+              <p className="mt-3 font-mono text-sm font-light text-zinc-500">
+                Score channel balance ratios, run circular rebalances, and track
+                health in near real-time. Keep liquidity balanced — pay less, route more.
+              </p>
+              <div className="mt-8 flex flex-wrap gap-4">
+                <MagneticButton
+                  href="/dashboard"
+                  data-cursor="Dashboard"
+                  strength={0.25}
+                  className="rounded border border-[var(--spark)]/60 bg-[var(--spark)]/10 px-6 py-3 font-mono text-sm text-[var(--spark)] transition hover:border-[var(--spark-muted)] hover:bg-[var(--spark)]/20"
+                >
+                  Dashboard
+                </MagneticButton>
+                <MagneticButton
+                  href="https://github.com/rahilbhavan/spark/tree/main/channel-liquidity-manager"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-cursor="Initialize"
+                  strength={0.25}
+                  className="rounded border border-zinc-600 bg-zinc-800/60 px-6 py-3 font-mono text-sm text-zinc-300 transition hover:border-zinc-500 hover:bg-zinc-800"
+                >
+                  Initialize Manager
+                </MagneticButton>
+              </div>
+            </div>
+            </header>
+          </RevealOnScroll>
+
+          {/* Feature sections — asymmetric grid, one block larger / offset */}
+          <RevealOnScroll variant="fade-up" start="top 88%">
+            <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-12 lg:gap-12">
+            <section className="border border-zinc-800 bg-zinc-900/30 px-6 py-6 lg:col-span-5">
+              <p className="mb-2 font-display text-[length:var(--text-display-label)] font-medium uppercase tracking-widest text-zinc-500">
+                Channel Health
+              </p>
+              <h2 className="mb-2 font-display text-xl font-semibold text-zinc-100 sm:text-2xl">
                 Real-Time Channel Health
               </h2>
               <p className="font-mono text-sm text-zinc-400">
@@ -294,8 +328,11 @@ export default function Home() {
                 warning 0.20–0.80, critical outside. Snapshot every 5 minutes.
               </p>
             </section>
-            <section className="border border-zinc-800 bg-zinc-900/30 px-5 py-5">
-              <h2 className="mb-2 font-mono text-lg font-semibold text-zinc-100">
+            <section className="border border-zinc-800 bg-zinc-900/30 px-6 py-6 lg:col-span-5">
+              <p className="mb-2 font-display text-[length:var(--text-display-label)] font-medium uppercase tracking-widest text-zinc-500">
+                Analysis
+              </p>
+              <h2 className="mb-2 font-display text-xl font-semibold text-zinc-100 sm:text-2xl">
                 Imbalance Analysis
               </h2>
               <p className="font-mono text-sm text-zinc-400">
@@ -303,8 +340,11 @@ export default function Home() {
                 inbound (high local). Prioritizes top 5 for rebalance.
               </p>
             </section>
-            <section className="border border-zinc-800 bg-zinc-900/30 px-5 py-5 sm:col-span-2 lg:col-span-1">
-              <h2 className="mb-2 font-mono text-lg font-semibold text-zinc-100">
+            <section className="border border-zinc-800 bg-zinc-900/30 px-6 py-6 sm:col-span-2 lg:col-span-2 lg:-mt-2 lg:self-end">
+              <p className="mb-2 font-display text-[length:var(--text-display-label)] font-medium uppercase tracking-widest text-zinc-500">
+                Integration
+              </p>
+              <h2 className="mb-2 font-display text-xl font-semibold text-zinc-100 sm:text-2xl">
                 LND Integration
               </h2>
               <p className="font-mono text-sm text-zinc-400">
@@ -312,14 +352,17 @@ export default function Home() {
                 Optional InfluxDB + Grafana for time-series.
               </p>
             </section>
-          </div>
+            </div>
+          </RevealOnScroll>
 
           {/* Simulator (wrapped in Suspense for nuqs/useSearchParams) */}
-          <div className="mt-12">
-            <Suspense fallback={<SimulatorFallback />}>
-              <RebalanceSimulator />
-            </Suspense>
-          </div>
+          <RevealOnScroll variant="fade-up" start="top 85%">
+            <div className="mt-20">
+              <Suspense fallback={<SimulatorFallback />}>
+                <RebalanceSimulator />
+              </Suspense>
+            </div>
+          </RevealOnScroll>
         </div>
       </main>
 

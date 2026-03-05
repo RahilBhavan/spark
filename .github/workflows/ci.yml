@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          cd channel-liquidity-manager
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Ruff check
+        run: |
+          cd channel-liquidity-manager
+          ruff check .
+
+      - name: Pytest
+        run: |
+          cd channel-liquidity-manager
+          pytest tests/ -v --tb=short
+        env:
+          REBALANCER_DB_PATH: ""
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: |
+          cd web
+          bun install --frozen-lockfile
+
+      - name: Lint
+        run: |
+          cd web
+          bun run lint
+
+      - name: Unit tests
+        run: |
+          cd web
+          bun run test
+
+      - name: Build
+        run: |
+          cd web
+          bun run build

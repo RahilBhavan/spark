@@ -21,17 +21,20 @@ const FALLBACK: RebalancesRecentPayload = {
   events: [],
 };
 
-export async function GET(): Promise<
-  NextResponse<RebalancesRecentPayload>
-> {
+export async function GET(
+  request: Request
+): Promise<NextResponse<RebalancesRecentPayload>> {
   const apiUrl = process.env.REBALANCER_API_URL;
   if (!apiUrl) {
     return NextResponse.json(FALLBACK);
   }
 
+  const node = new URL(request.url).searchParams.get("node");
+  const qs = node ? `?node=${encodeURIComponent(node)}` : "";
+
   try {
     const res = await fetch(
-      `${apiUrl.replace(/\/$/, "")}/api/rebalances/recent`,
+      `${apiUrl.replace(/\/$/, "")}/api/rebalances/recent${qs}`,
       {
         next: { revalidate: 0 },
         headers: { Accept: "application/json" },

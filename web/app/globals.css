@@ -3,11 +3,16 @@
 :root {
   --background: #0c0c0c;
   --foreground: #e4e4e4;
+  --off-white: #f5f5f5;
   --accent: #22c55e;
   --accent-muted: #16a34a;
   /* SPARK BTC: amber/orange accent for brand */
   --spark: #f59e0b;
   --spark-muted: #d97706;
+  /* Display typography scale — massive & brutalist-elegant */
+  --text-display-hero: clamp(3rem, 12vw + 2rem, 10rem);
+  --text-display-section: clamp(2rem, 5vw + 1rem, 4rem);
+  --text-display-label: clamp(0.65rem, 1vw, 0.75rem);
 }
 
 @theme inline {
@@ -15,10 +20,33 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-jetbrains-mono);
+  --font-display: var(--font-display);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+/* Display font utility for headlines */
+.font-display {
+  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Focus visible for accessibility — keyboard users */
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--spark);
+  outline-offset: 2px;
+}
+
+/* Respect reduced motion — disable decorative motion */
+@media (prefers-reduced-motion: reduce) {
+  .lenis.lenis-smooth {
+    scroll-behavior: auto;
+  }
+  .lenis.lenis-smooth [data-lenis-prevent] {
+    overscroll-behavior: auto;
+  }
 }

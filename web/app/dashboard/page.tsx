@@ -9,6 +9,7 @@ type StatusPayload = {
   rebalance_count_today: number;
   node_grade: string | null;
   source: string;
+  rebalance_success_rate_24h?: number | null;
 };
 
 type SnapshotRow = {
@@ -33,6 +34,7 @@ type RebalanceEvent = {
 type ConfigPayload = {
   target_ratio_low: number;
   target_ratio_high: number;
+  estimated_extra_cost_per_forward_sats?: number | null;
 };
 
 function gradeFromRatio(ratio: number): string {
@@ -51,22 +53,26 @@ export default function DashboardPage() {
   const [snapshotTs, setSnapshotTs] = useState<string | null>(null);
   const [events, setEvents] = useState<RebalanceEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [nodes, setNodes] = useState<string[]>(["default"]);
+  const [selectedNode, setSelectedNode] = useState<string>("default");
 
-  useEffect(() => {
-    let cancelled = false;
-
-    Promise.all([
-      fetch("/api/status").then((r) => r.json()) as Promise<StatusPayload>,
-      fetch("/api/config").then((r) => r.json()) as Promise<ConfigPayload>,
-      fetch("/api/snapshots/latest").then((r) =>
+  const fetchData = () => {
+    setError(null);
+    const q = selectedNode && selectedNode !== "default" ? `?node=${encodeURIComponent(selectedNode)}` : "";
+    return Promise.all([
+      fetch(`/api/nodes`).then((r) => r.json()) as Promise<{ nodes: string[] }>,
+      fetch(`/api/status${q}`).then((r) => r.json()) as Promise<StatusPayload>,
+      fetch(`/api/config`).then((r) => r.json()) as Promise<ConfigPayload>,
+      fetch(`/api/snapshots/latest${q}`).then((r) =>
         r.json()
       ) as Promise<{ snapshots: SnapshotRow[]; ts: string | null }>,
-      fetch("/api/rebalances/recent").then((r) =>
+      fetch(`/api/rebalances/recent${q}`).then((r) =>
         r.json()
       ) as Promise<{ events: RebalanceEvent[] }>,
     ])
-      .then(([s, cfg, snap, reb]) => {
-        if (cancelled) return;
+      .then(([nodesRes, s, cfg, snap, reb]) => {
+        setNodes(nodesRes.nodes ?? ["default"]);
         setStatus(s);
         setConfig(cfg);
         setSnapshots(snap.snapshots ?? []);
@@ -74,22 +80,31 @@ export default function DashboardPage() {
         setEvents(reb.events ?? []);
       })
       .catch(() => {
-        if (!cancelled) {
-          setStatus(null);
-          setConfig(null);
-          setSnapshots([]);
-          setSnapshotTs(null);
-          setEvents([]);
-        }
+        setStatus(null);
+        setConfig(null);
+        setSnapshots([]);
+        setSnapshotTs(null);
+        setEvents([]);
+        setError("Failed to load dashboard. Check API and try again.");
       })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+      .finally(() => setLoading(false));
+  };
 
+  useEffect(() => {
+    let cancelled = false;
+    fetchData().then(() => {
+      if (cancelled) return;
+    });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [selectedNode]);
+
+  // Auto-refresh every 60s
+  useEffect(() => {
+    const interval = setInterval(fetchData, 60_000);
+    return () => clearInterval(interval);
+  }, [selectedNode]);
 
   const chanIdToAlias = new Map(snapshots.map((s) => [s.chan_id, s.alias]));
   const live = status?.source === "sqlite";
@@ -112,18 +127,40 @@ export default function DashboardPage() {
               >
                 ← Home
               </Link>
-              <h1 className="mt-2 font-mono text-2xl font-bold text-white sm:text-3xl">
+              <h1 className="mt-2 font-display text-2xl font-bold text-white sm:text-3xl">
                 <span className="text-[var(--spark)]">SPARK</span>{" "}
                 <span className="text-zinc-300">BTC</span> — Dashboard
               </h1>
             </div>
             <div className="flex flex-wrap items-center gap-4">
+              {nodes.length > 1 && (
+                <select
+                  value={selectedNode}
+                  onChange={(e) => setSelectedNode(e.target.value)}
+                  className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1 font-mono text-xs text-zinc-200"
+                >
+                  {nodes.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              )}
               {config && (
-                <span className="font-mono text-xs text-zinc-500">
-                  Target:{" "}
-                  {Math.round(config.target_ratio_low * 100)}–
-                  {Math.round(config.target_ratio_high * 100)}%
-                </span>
+                <>
+                  <span className="font-mono text-xs text-zinc-500">
+                    Target:{" "}
+                    {Math.round(config.target_ratio_low * 100)}–
+                    {Math.round(config.target_ratio_high * 100)}%
+                  </span>
+                  {config.estimated_extra_cost_per_forward_sats != null &&
+                    config.estimated_extra_cost_per_forward_sats > 0 && (
+                      <span className="font-mono text-xs text-zinc-500">
+                        Est. extra cost if you don&apos;t rebalance: ~
+                        {config.estimated_extra_cost_per_forward_sats} sats/forward
+                      </span>
+                    )}
+                </>
               )}
               <span
                 className={`font-mono text-xs ${
@@ -135,6 +172,22 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {error && (
+            <div className="mb-6 flex items-center justify-between rounded border border-red-800/60 bg-red-950/30 px-4 py-3 font-mono text-sm text-red-300">
+              <span>{error}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setLoading(true);
+                  setError(null);
+                  fetchData();
+                }}
+                className="shrink-0 rounded border border-red-600/60 px-3 py-1.5 text-red-200 hover:bg-red-900/40"
+              >
+                Retry
+              </button>
+            </div>
+          )}
           {loading ? (
             <p className="font-mono text-sm text-zinc-500">
               Loading…
@@ -286,6 +339,13 @@ export default function DashboardPage() {
             <span className="text-zinc-600">NODE.GRADE</span>{" "}
             {live && status!.node_grade ? status!.node_grade : "—"}
           </span>
+          {live &&
+            status!.rebalance_success_rate_24h != null && (
+              <span>
+                <span className="text-zinc-600">SLO.24H</span>{" "}
+                {(status!.rebalance_success_rate_24h * 100).toFixed(1)}%
+              </span>
+            )}
         </div>
       </footer>
     </div>

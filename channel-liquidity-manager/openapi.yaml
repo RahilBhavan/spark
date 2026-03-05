@@ -1,0 +1,154 @@
+openapi: 3.1.0
+info:
+  title: SPARK BTC Channel Liquidity API
+  description: Read-only HTTP API for dashboard (snapshots, rebalances, status, config).
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:5000
+    description: Local API
+
+paths:
+  /health:
+    get:
+      summary: Liveness
+      description: API is up and DB is readable (if present).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, db_attached]
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  db_attached:
+                    type: boolean
+
+  /api/config:
+    get:
+      summary: Config
+      description: Target ratio band and optional fee heuristic.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  target_ratio_low:
+                    type: number
+                    example: 0.4
+                  target_ratio_high:
+                    type: number
+                    example: 0.6
+                  estimated_extra_cost_per_forward_sats:
+                    type: integer
+                    nullable: true
+
+  /api/status:
+    get:
+      summary: Status
+      description: Channel count, last snapshot, rebalance count today, node grade, SLO metric.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  channels_n:
+                    type: integer
+                  last_snapshot_ts:
+                    type: string
+                    nullable: true
+                  rebalance_count_today:
+                    type: integer
+                  node_grade:
+                    type: string
+                    nullable: true
+                  source:
+                    type: string
+                    example: sqlite
+                  rebalance_success_rate_24h:
+                    type: number
+                    nullable: true
+                    description: Success rate (0–1) over last 24h; null if no events.
+
+  /api/snapshots/latest:
+    get:
+      summary: Latest snapshots
+      description: Latest channel snapshot rows.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  snapshots:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        chan_id: { type: string }
+                        alias: { type: string }
+                        local_balance: { type: integer }
+                        capacity: { type: integer }
+                        ratio: { type: number }
+                        health: { type: string }
+                  ts:
+                    type: string
+                    nullable: true
+
+  /api/rebalances/recent:
+    get:
+      summary: Recent rebalances
+      description: Last N rebalance events (success and failure).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ts: { type: string }
+                        chan_id: { type: string }
+                        amount_sats: { type: integer }
+                        fee_sats: { type: integer }
+                        fee_ppm: { type: number }
+                        success: { type: integer }
+                        error: { type: string }
+
+components:
+  schemas:
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          description: Machine-readable code (e.g. not_found, internal_error).
+        message:
+          type: string
+          description: Human-readable message.
+
+  responses:
+    Error4xx5xx:
+      description: Consistent error payload for 4xx/5xx.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"

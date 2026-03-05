@@ -4,13 +4,27 @@ Serves channel snapshots, rebalance events, node summary, and config from SQLite
 Run separately: python api_server.py (default port 5000).
 Set REBALANCER_DB_PATH if rebalancer.db is not in cwd.
 """
+from __future__ import annotations
+
 import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-
+import structlog
 from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
+# Structured logging: JSON with timestamp, level, event, and context
+structlog.configure(
+    processors=[
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.add_log_level,
+        structlog.processors.JSONRenderer(),
+    ],
+)
+logger = structlog.get_logger()
 
 try:
     from config import (
@@ -29,15 +43,61 @@ except ImportError:
 
 app = Flask(__name__)
 CORS(app)
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["60 per minute"],
+    storage_uri="memory://",
+)
 DB = Path(os.getenv("REBALANCER_DB_PATH", "rebalancer.db"))
+DB2 = Path(os.getenv("REBALANCER_DB_PATH_2", ""))
+# Multi-node: default = primary DB; node2 = second DB when REBALANCER_DB_PATH_2 is set
+NODES = ["default"] + (["node2"] if DB2 and str(DB2).strip() else [])
+
+
+def error_response(code: str, message: str, status: int) -> tuple[Response, int]:
+    """Consistent JSON error shape for 4xx/5xx (OpenAPI contract)."""
+    body = {"error": code, "message": message}
+    return jsonify(body), status
+
+
+@app.errorhandler(404)
+def not_found(e):
+    return error_response("not_found", "Resource not found", 404)
+
+
+@app.errorhandler(500)
+def internal_error(e):
+    logger.error("internal_error", exc_info=True)
+    return error_response("internal_error", "An unexpected error occurred", 500)
+
+
+@app.after_request
+def log_request(response):
+    logger.info(
+        "request",
+        method=request.method,
+        path=request.path,
+        status=response.status_code,
+    )
+    return response
+
+
+def _db_path(node_id: str) -> Path | None:
+    if node_id == "default":
+        return DB
+    if node_id == "node2" and DB2 and str(DB2).strip():
+        return DB2
+    return None
 
 
 @contextmanager
-def get_db():
-    if not DB.exists():
+def get_db(node_id: str = "default"):
+    path = _db_path(node_id)
+    if path is None or not path.exists():
         yield None
         return
-    conn = sqlite3.connect(DB)
+    conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     try:
         yield conn
@@ -58,10 +118,17 @@ def config():
     return jsonify(payload)
 
 
+@app.route("/api/nodes")
+def nodes():
+    """List node IDs for multi-node dashboard (default, and node2 if second DB is set)."""
+    return jsonify({"nodes": NODES})
+
+
 @app.route("/health")
+@limiter.exempt
 def health():
-    """Liveness: API is up and DB is readable (if present)."""
-    with get_db() as conn:
+    """Liveness: API is up and primary DB is readable (if present)."""
+    with get_db("default") as conn:
         ok = conn is not None
     return jsonify({"status": "ok", "db_attached": ok})
 
@@ -71,8 +138,12 @@ def status():
     """
     Summary for status strip: channel count, last snapshot time,
     rebalance count (today), and optional node grade inputs.
+    Query param: node=default|node2 (multi-node).
     """
-    with get_db() as conn:
+    node_id = request.args.get("node", "default")
+    if node_id not in NODES:
+        return error_response("invalid_node", f"Unknown node: {node_id}", 400)
+    with get_db(node_id) as conn:
         if conn is None:
             return jsonify({
                 "channels_n": 0,
@@ -80,6 +151,7 @@ def status():
                 "rebalance_count_today": 0,
                 "node_grade": None,
                 "source": "none",
+                "rebalance_success_rate_24h": None,
             })
 
         cur = conn.execute(
@@ -111,12 +183,27 @@ def status():
         ratios = [r["ratio"] for r in cur.fetchall()]
         node_grade = _grade_from_ratios(ratios) if ratios else None
 
+        # SLO: rebalance success rate over last 24h (for observability)
+        cur = conn.execute(
+            """
+            SELECT COUNT(*) AS total, SUM(success) AS ok
+            FROM events WHERE ts >= datetime('now', '-24 hours')
+            """
+        )
+        row = cur.fetchone()
+        total_24h = row["total"] or 0
+        ok_24h = row["ok"] or 0
+        rebalance_success_rate_24h = (
+            round(ok_24h / total_24h, 4) if total_24h > 0 else None
+        )
+
     return jsonify({
         "channels_n": channels_n,
         "last_snapshot_ts": last_snapshot_ts,
         "rebalance_count_today": rebalance_count_today,
         "node_grade": node_grade,
         "source": "sqlite",
+        "rebalance_success_rate_24h": rebalance_success_rate_24h,
     })
 
 
@@ -138,8 +225,11 @@ def _grade_from_ratios(ratios: list) -> str:
 
 @app.route("/api/snapshots/latest")
 def snapshots_latest():
-    """Latest channel snapshot rows for dashboard tables/charts."""
-    with get_db() as conn:
+    """Latest channel snapshot rows for dashboard tables/charts. Query: node=default|node2."""
+    node_id = request.args.get("node", "default")
+    if node_id not in NODES:
+        return error_response("invalid_node", f"Unknown node: {node_id}", 400)
+    with get_db(node_id) as conn:
         if conn is None:
             return jsonify({"snapshots": [], "ts": None})
 
@@ -160,9 +250,12 @@ def snapshots_latest():
 
 @app.route("/api/rebalances/recent")
 def rebalances_recent():
-    """Last N rebalance events (success and failure)."""
+    """Last N rebalance events (success and failure). Query: node=default|node2."""
+    node_id = request.args.get("node", "default")
+    if node_id not in NODES:
+        return error_response("invalid_node", f"Unknown node: {node_id}", 400)
     limit = min(int(os.getenv("LIMIT", "20")), 100)
-    with get_db() as conn:
+    with get_db(node_id) as conn:
         if conn is None:
             return jsonify({"events": []})
 

@@ -118,6 +118,16 @@ You can add more panels (e.g. rebalance events, fee_ppm, success rate) using the
 
 For production, set `LND_TLS_CERT_PATH` to your real cert and do not disable TLS verify.
 
+## Production and secrets
+
+Do not store the LND macaroon (or other secrets) in plain environment variables in deployment configs or docs. For production:
+
+- Use a **secrets manager** (e.g. Doppler, HashiCorp Vault, or your cloud’s secret store) and inject secrets at runtime (e.g. into env or a mounted file).
+- Run the scheduler and API with least privilege; restrict filesystem and network access where possible.
+- The DB path and API port are non-sensitive; LND URL, TLS cert path, and macaroon are sensitive and should come from a secret store.
+
+Rebalance decisions are written to the `events` table and optionally to the `audit` table (see below) for an append-only audit trail.
+
 ## Fee limit
 
 Rebalancer caps routing fee at **500 ppm** (e.g. 1M sats at 200 ppm ≈ 200 sats). You can change `MAX_FEE_PPM` in `rebalancer.py` if needed.
